@@ -1,8 +1,0 @@
-name = "aquaworldbot-worker"
-main = "index.js"
-compatibility_date = "2025-11-25"
-type = "esm"
-
-[vars]
-TELEGRAM_TOKEN = "اینجا توکن رباتت"
-WEBHOOK_SECRET = "secret123"
