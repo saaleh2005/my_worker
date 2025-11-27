@@ -1,0 +1,58 @@
+export default {
+  async fetch(request, env) {
+    if (request.method === "POST") {
+      const update = await request.json();
+
+      // آیدی ربات
+      const botUsername = "@AquaWorldir_bot";
+
+      // استخراج پیام کاربر در صورت تگ کردن ربات
+      let userMessage = "";
+      if (update.message && update.message.text) {
+        if (update.message.text.includes(botUsername)) {
+          userMessage = update.message.text.replace(botUsername, "").trim();
+        }
+      }
+
+      if (userMessage) {
+        const chatId = update.message.chat.id;
+
+        // فراخوانی Hugging Face برای پاسخ‌دهی
+        const hfResponse = await fetch(
+          "https://api-inference.huggingface.co/models/gpt2",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${env.HF_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              inputs: `سوال تخصصی در مورد آکواریوم، ماهی‌ها و نیمه‌آبزی‌ها: ${userMessage}`,
+            }),
+          }
+        );
+
+        let text = "متأسفم، پاسخ در دسترس نیست.";
+        try {
+          const json = await hfResponse.json();
+          if (json && json[0] && json[0].generated_text) {
+            text = json[0].generated_text;
+          }
+        } catch (e) {
+          console.error("HF Error:", e);
+        }
+
+        // ارسال پاسخ به تلگرام
+        await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text }),
+        });
+      }
+
+      return new Response("OK");
+    }
+
+    return new Response("Method Not Allowed", { status: 405 });
+  },
+};
