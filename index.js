@@ -1,59 +1,51 @@
 export default {
   async fetch(request, env) {
-    // فقط برای تست وقتی آدرس Worker را در مرورگر باز می‌کنید
+
+    // تست GET
     if (request.method === "GET") {
       return new Response("AquaWorldBot Worker is running ✔️", {
         headers: { "content-type": "text/plain" },
       });
     }
 
+    // هندل وبهوک تلگرام
     if (request.method === "POST") {
       try {
         const update = await request.json();
-        console.log("Update received:", JSON.stringify(update));
 
-        const botUsername = "@AquaWorldir_bot"; // آیدی ربات
-        let userMessage = "";
+        // پیام کاربر
+        const message = update?.message?.text;
+        const chatId = update?.message?.chat?.id;
 
-        if (update.message && update.message.text) {
-          if (update.message.text.includes(botUsername)) {
-            userMessage = update.message.text.replace(botUsername, "").trim();
-            console.log("User message:", userMessage);
-          }
+        if (!message || !chatId) {
+          return new Response("No message", { status: 200 });
         }
 
-        if (!userMessage) {
-          console.log("No user message to process");
-          return new Response("No user message", { status: 200 });
-        }
-
-        const chatId = update.message.chat.id;
-
-        // فراخوانی Hugging Face برای پاسخ‌دهی
-        console.log("Sending request to Hugging Face...");
+        // فراخوانی مدل بهتر HuggingFace — کاملاً رایگان
         const hfResponse = await fetch(
-          "https://api-inference.huggingface.co/models/gpt2", // می‌تونی مدل دقیق‌تر بذاری
+          "https://api-inference.huggingface.co/models/google/flan-t5-large",
           {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${env.HF_API_KEY}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ inputs: userMessage }),
+            body: JSON.stringify({
+              inputs: `پاسخ بده: ${message}`,
+            }),
           }
         );
 
-        console.log("HF Response status:", hfResponse.status);
         let text = "متأسفم، باسخ در دسترس نیست.";
+
         try {
-          const json = await hfResponse.json();
-          console.log("HF Response JSON:", JSON.stringify(json));
-          if (json && json[0] && json[0].generated_text) {
-            text = json[0].generated_text;
+          const data = await hfResponse.json();
+          if (data && data[0] && data[0].generated_text) {
+            text = data[0].generated_text;
+          } else if (data && data[0] && data[0].generated_text === undefined && data[0].output_text) {
+            text = data[0].output_text;
           }
-        } catch (e) {
-          console.error("HF parsing error:", e);
-        }
+        } catch (_) {}
 
         // ارسال پاسخ به تلگرام
         await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
@@ -63,9 +55,9 @@ export default {
         });
 
         return new Response("OK", { status: 200 });
+
       } catch (err) {
-        console.error("Worker error:", err);
-        return new Response("Internal Server Error", { status: 500 });
+        return new Response("Internal Error", { status: 500 });
       }
     }
 
