@@ -1,27 +1,30 @@
 export default {
   async fetch(request, env) {
 
-    // تست GET
     if (request.method === "GET") {
       return new Response("AquaWorldBot Worker is running ✔️", {
         headers: { "content-type": "text/plain" },
       });
     }
 
-    // هندل وبهوک تلگرام
     if (request.method === "POST") {
       try {
         const update = await request.json();
 
-        // پیام کاربر
-        const message = update?.message?.text;
         const chatId = update?.message?.chat?.id;
+        const text = update?.message?.text;
 
-        if (!message || !chatId) {
+        if (!chatId || !text) {
           return new Response("No message", { status: 200 });
         }
 
-        // فراخوانی مدل بهتر HuggingFace — کاملاً رایگان
+        // حذف تگ اگر وجود داشت — اما پیام حتی بدون تگ هم جواب داده می‌شود
+        const botUsername = "@AquaWorldir_bot";
+        let userMessage = text.replace(botUsername, "").trim();
+
+        if (!userMessage) userMessage = text;
+
+        // درخواست به HuggingFace — مدل T5 بهتره
         const hfResponse = await fetch(
           "https://api-inference.huggingface.co/models/google/flan-t5-large",
           {
@@ -31,27 +34,29 @@ export default {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              inputs: `پاسخ بده: ${message}`,
+              inputs: userMessage
             }),
           }
         );
 
-        let text = "متأسفم، باسخ در دسترس نیست.";
+        let aiText = "متأسفم، جوابی در دسترس نیست.";
 
-        try {
-          const data = await hfResponse.json();
-          if (data && data[0] && data[0].generated_text) {
-            text = data[0].generated_text;
-          } else if (data && data[0] && data[0].generated_text === undefined && data[0].output_text) {
-            text = data[0].output_text;
-          }
-        } catch (_) {}
+        const data = await hfResponse.json();
 
-        // ارسال پاسخ به تلگرام
+        // انواع حالت‌های خروجی برای مدل‌های HF
+        if (Array.isArray(data) && data[0]) {
+          if (data[0].generated_text) aiText = data[0].generated_text;
+          else if (data[0].output_text) aiText = data[0].output_text;
+        }
+
+        // ارسال پیام به تلگرام
         await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text }),
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: aiText,
+          }),
         });
 
         return new Response("OK", { status: 200 });
