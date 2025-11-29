@@ -1,17 +1,18 @@
-const HF_URL = "https://router.huggingface.co/microsoft/phi-4";
+const HF_URL = "https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-0.5B-Instruct";
 
 export default {
   async fetch(request, env) {
-
     if (request.method === "POST") {
+      const update = await request.json();
 
-      let update = await request.json();
-      let message = update.message?.text || "";
-      let chatId = update.message?.chat?.id;
+      const message = update.message?.text;
+      const chatId = update.message?.chat?.id;
 
-      if (!chatId) return new Response("No chat ID");
+      if (!message || !chatId) {
+        return new Response("No message", { status: 200 });
+      }
 
-      // ارسال پیام کاربر به HuggingFace Router (رایگان)
+      // ارسال پیام به HuggingFace Router
       const hfRes = await fetch(HF_URL, {
         method: "POST",
         headers: {
@@ -20,23 +21,23 @@ export default {
         },
         body: JSON.stringify({
           inputs: message,
+          parameters: {
+            max_new_tokens: 150,
+            temperature: 0.7,
+            repetition_penalty: 1.1,
+          }
         }),
       });
 
-      let reply = "متأسفم، پاسخی دریافت نشد.";
+      let text = "متأسفم، جوابی در دسترس نیست.";
 
       try {
         const data = await hfRes.json();
 
-        // فرمت Router معمولا این شکلیه:
-        // { generated_text: "..." }
-        if (data?.generated_text) reply = data.generated_text;
-
-        // بعضی مدل‌ها خروجی آرایه میدن
-        if (Array.isArray(data) && data[0]?.generated_text)
-          reply = data[0].generated_text;
-
-      } catch (err) {}
+        // روش جدید خروجی Router
+        if (data.generated_text) text = data.generated_text;
+        if (data[0]?.generated_text) text = data[0].generated_text;
+      } catch (e) {}
 
       // ارسال پاسخ به تلگرام
       await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
@@ -44,13 +45,13 @@ export default {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
-          text: reply,
+          text
         }),
       });
 
       return new Response("OK");
     }
 
-    return new Response("Bot is running ✔️");
-  }
+    return new Response("AquaWorldBot is Running ✔️");
+  },
 };
