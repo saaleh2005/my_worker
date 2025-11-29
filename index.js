@@ -17,32 +17,44 @@ export default {
           "Authorization": `Bearer ${env.HF_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          inputs: message,
-        }),
+        body: JSON.stringify({ inputs: message }),
       });
 
-      let text = "متأسفم، جوابی در دسترس نیست.";
+      let text = "متأسفم، پاسخ در دسترس نیست.";
+
+      // DEBUG MODE: هر چیزی HF برگرداند مستقیم چاپ کن
+      let raw = await hfRes.text();  // مهم: به جای json از text میگیریم
+      let parsed;
 
       try {
-        const data = await hfRes.json();
-        if (data && data.generated_text) {
-          text = data.generated_text;
-        }
-        if (Array.isArray(data) && data[0]?.generated_text) {
-          text = data[0].generated_text;
-        }
-      } catch (e) {}
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        parsed = raw;
+      }
+
+      let finalMessage = "";
+
+      // اگر generated_text بود
+      if (Array.isArray(parsed) && parsed[0]?.generated_text) {
+        finalMessage = parsed[0].generated_text;
+      }
+      else if (parsed?.generated_text) {
+        finalMessage = parsed.generated_text;
+      }
+      else {
+        // اگر error برگرداند خود متن را چاپ کن
+        finalMessage = "HF RAW:\n" + raw;
+      }
 
       await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify({ chat_id: chatId, text: finalMessage }),
       });
 
       return new Response("OK");
     }
 
-    return new Response("AquaWorldBot is Running ✔️");
+    return new Response("AquaWorldBot Debug Mode ✔️");
   },
 };
