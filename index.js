@@ -1,60 +1,56 @@
-const HF_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-0.5B-Instruct";
+const HF_URL = "https://router.huggingface.co/microsoft/phi-4";
 
 export default {
   async fetch(request, env) {
 
     if (request.method === "POST") {
-      const update = await request.json();
-      const message = update.message?.text || "";
-      const chatId = update.message?.chat?.id;
 
-      if (!chatId) return new Response("No chat id");
+      let update = await request.json();
+      let message = update.message?.text || "";
+      let chatId = update.message?.chat?.id;
 
-      // ارسال به HuggingFace
+      if (!chatId) return new Response("No chat ID");
+
+      // ارسال پیام کاربر به HuggingFace Router (رایگان)
       const hfRes = await fetch(HF_URL, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${env.HF_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ inputs: message }),
+        body: JSON.stringify({
+          inputs: message,
+        }),
       });
 
-      let text = "متأسفم، پاسخ در دسترس نیست.";
-
-      // DEBUG MODE: هر چیزی HF برگرداند مستقیم چاپ کن
-      let raw = await hfRes.text();  // مهم: به جای json از text میگیریم
-      let parsed;
+      let reply = "متأسفم، پاسخی دریافت نشد.";
 
       try {
-        parsed = JSON.parse(raw);
-      } catch (e) {
-        parsed = raw;
-      }
+        const data = await hfRes.json();
 
-      let finalMessage = "";
+        // فرمت Router معمولا این شکلیه:
+        // { generated_text: "..." }
+        if (data?.generated_text) reply = data.generated_text;
 
-      // اگر generated_text بود
-      if (Array.isArray(parsed) && parsed[0]?.generated_text) {
-        finalMessage = parsed[0].generated_text;
-      }
-      else if (parsed?.generated_text) {
-        finalMessage = parsed.generated_text;
-      }
-      else {
-        // اگر error برگرداند خود متن را چاپ کن
-        finalMessage = "HF RAW:\n" + raw;
-      }
+        // بعضی مدل‌ها خروجی آرایه میدن
+        if (Array.isArray(data) && data[0]?.generated_text)
+          reply = data[0].generated_text;
 
+      } catch (err) {}
+
+      // ارسال پاسخ به تلگرام
       await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: finalMessage }),
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: reply,
+        }),
       });
 
       return new Response("OK");
     }
 
-    return new Response("AquaWorldBot Debug Mode ✔️");
-  },
+    return new Response("Bot is running ✔️");
+  }
 };
