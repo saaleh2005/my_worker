@@ -12,7 +12,7 @@ export default {
         return new Response("No message", { status: 200 });
       }
 
-      // ارسال پیام به HuggingFace Router
+      // ارسال به HuggingFace
       const hfRes = await fetch(HF_URL, {
         method: "POST",
         headers: {
@@ -22,22 +22,17 @@ export default {
         body: JSON.stringify({
           inputs: message,
           parameters: {
-            max_new_tokens: 150,
-            temperature: 0.7,
-            repetition_penalty: 1.1,
+            max_new_tokens: 150
           }
         }),
       });
 
-      let text = "متأسفم، جوابی در دسترس نیست.";
+      // متن اولیه
+      let text = "❗ HF ERROR:\n";
 
-      try {
-        const data = await hfRes.json();
-
-        // روش جدید خروجی Router
-        if (data.generated_text) text = data.generated_text;
-        if (data[0]?.generated_text) text = data[0].generated_text;
-      } catch (e) {}
+      // کل پاسخ HuggingFace را داخل تلگرام چاپ می‌کنیم
+      let raw = await hfRes.text();
+      text += raw.substring(0, 3500); // تلگرام محدودیت دارد
 
       // ارسال پاسخ به تلگرام
       await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
