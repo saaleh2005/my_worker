@@ -14,16 +14,23 @@ export default {
         const update = await request.json();
         const message = update.message?.text || "";
         const chatId = update.message?.chat?.id;
+        const chatType = update.message?.chat?.type; // "private" یا "group"
 
         if (!chatId || !message) return new Response("No message", { status: 200 });
 
-        // فقط وقتی کاربر ربات رو تگ کرد
+        // فقط وقتی کاربر ربات رو در گروه تگ کرد، یا در چت خصوصی
         const botUsername = "@AquaWorldir_bot";
-        if (!message.includes(botUsername)) return new Response("Bot not mentioned", { status: 200 });
+        if (chatType === "group" && !message.includes(botUsername)) {
+          return new Response("Bot not mentioned in group", { status: 200 });
+        }
 
-        const userMessage = message.replace(botUsername, "").trim();
+        // پیام کاربر برای Grog
+        let userMessage = message;
+        if (chatType === "group") {
+          userMessage = message.replace(botUsername, "").trim();
+        }
 
-        // فراخوانی API Grog
+        // فراخوانی Grog API
         const grogResponse = await fetch(GROG_API_URL, {
           method: "POST",
           headers: {
@@ -31,20 +38,30 @@ export default {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "gpt-4",
+            model: "gpt-4", // مطمئن شو مدل درست باشه
             messages: [{ role: "user", content: userMessage }]
           })
         });
 
         let replyText = "متأسفم، پاسخ در دسترس نیست.";
 
-        try {
-          const data = await grogResponse.json();
-          if (data.choices && data.choices[0].message && data.choices[0].message.content) {
-            replyText = data.choices[0].message.content;
+        if (!grogResponse.ok) {
+          const errorText = await grogResponse.text();
+          console.error("Grog API error:", grogResponse.status, errorText);
+        } else {
+          try {
+            const data = await grogResponse.json();
+            console.log("Grog response:", data);
+
+            // بررسی دقیق پاسخ
+            if (data.choices && data.choices[0]?.message?.content) {
+              replyText = data.choices[0].message.content;
+            } else {
+              console.error("Unexpected Grog response structure:", data);
+            }
+          } catch (e) {
+            console.error("Grog JSON parse error:", e);
           }
-        } catch(e) {
-          console.error("Grog JSON parse error:", e);
         }
 
         // ارسال پاسخ به تلگرام
