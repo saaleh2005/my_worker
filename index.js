@@ -1,63 +1,56 @@
-const HF_URL = "https://router.huggingface.co/inference";
-
 export default {
   async fetch(request, env) {
 
     if (request.method === "POST") {
       const update = await request.json();
-      const message = update.message?.text || "";
+      const msg = update.message?.text;
       const chatId = update.message?.chat?.id;
 
-      if (!chatId) 
-        return new Response("No chat id");
+      if (!msg || !chatId) {
+        return new Response("No message");
+      }
 
-      // درخواست به HuggingFace
-      const hfRes = await fetch(HF_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${env.HF_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "meta-llama/Llama-3.2-1B-Instruct",
-          input: message,
-        }),
-      });
+      // --- ارسال به OpenAI ---
+      let aiText = "متأسفم، جوابی در دسترس نیست.";
 
-      // 🔥 پاسخ خام HuggingFace به‌صورت متن → برای تست
-      const rawText = await hfRes.text();
-
-      // 🔎 سعی می‌کنیم JSON تشخیص دهیم
-      let finalText = rawText;
       try {
-        const json = JSON.parse(rawText);
+        const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "user", content: msg }
+            ]
+          }),
+        });
 
-        if (json.generated_text) {
-          finalText = json.generated_text;
-        } else if (json.error) {
-          finalText = "❗ HF ERROR:\n" + JSON.stringify(json.error);
+        const data = await aiRes.json();
+
+        if (data?.choices?.[0]?.message?.content) {
+          aiText = data.choices[0].message.content;
+        } else if (data?.error) {
+          aiText = "❗ OpenAI ERROR:\n" + JSON.stringify(data.error);
         }
 
       } catch (err) {
-        finalText = "❗ RAW HF RESPONSE:\n" + rawText;
+        aiText = "خطا در اتصال به OpenAI";
       }
 
-      // ✉️ ارسال پاسخ
-      await fetch(
-        `https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: finalText
-          })
-        }
-      );
+
+      // --- ارسال پاسخ به تلگرام ---
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: aiText }),
+      });
 
       return new Response("OK");
     }
 
-    return new Response("Telegram AI Bot Running ✔️");
-  }
+    return new Response("Bot is Running ✔️");
+  },
 };
