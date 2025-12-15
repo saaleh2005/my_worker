@@ -1,9 +1,0 @@
-name = "aquaworldbot-worker"
-main = "index.js"
-compatibility_date = "2025-12-05"
-type = "esm"
-
-[vars]
-TELEGRAM_TOKEN = "8434421974:AAH_WzRuji__zGT91cUvPQMgZLtkkTBBKq4"
-GROG_API_KEY = "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"
-WEBHOOK_SECRET = "secret123"
